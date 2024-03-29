@@ -78,7 +78,7 @@ def default_transform(size, affine, mean=None, std=None):
             transforms.RandomAffine(
                 degrees=0,
                 translate=(0.1, 0.1),
-                fillcolor=int(0.285*255)
+                fill=int(0.285*255)
             )
         )
     transform.append(transforms.ToTensor())
