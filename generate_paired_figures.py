@@ -1,3 +1,4 @@
+# THIS SEEMS NOT IMPORTANT RN SKIP
 import argparse
 import os
 import torch
@@ -17,14 +18,15 @@ opts = yaml.safe_load(open(file_loc, "r"))
 opts["device"] = "cpu"
 
 model = EffectRegressorMLP(opts)
-model.load(args.ckpt, "_best", 1)
+model.load(args.ckpt, "_best", 1) # this has no effect on the encoder since next line loads the encoder again
 model.load(args.ckpt, "_best", 2)
 model.encoder2.eval()
 
 transform = data.default_transform(size=opts["size"], affine=False, mean=0.279, std=0.0094)
 trainset = data.SingleObjectData(transform=transform)
 loader = torch.utils.data.DataLoader(trainset, batch_size=2400, shuffle=False)
-objects = iter(loader).next()["observation"]
+iterator = iter(loader)
+objects = next(iterator)["observation"]
 objects = objects.reshape(5, 10, 3, 4, 4, opts["size"], opts["size"])
 
 dist = torch.zeros(25, 3, 10, 10)

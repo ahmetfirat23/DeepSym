@@ -55,6 +55,11 @@ def kmeans(x, k, centroids=None, max_iter=None, epsilon=0.01):
 def tree_to_code(tree, feature_names, effect_names, obj_names):
     tree_ = tree.tree_
 
+    # Do depth first search and get rule for every node
+    # This function list every decision until reaching a leaf
+    # That means it lists every element of symbol that has been used to reach the effect
+    # Since effects are not in unity in the nodes, events at the nodes are probabilistic
+    # So this maps symbols to probabilities of the effects
     def recurse(node, rules):
         if tree_.feature[node] != _tree.TREE_UNDEFINED:
             left = rules.copy()
@@ -68,7 +73,9 @@ def tree_to_code(tree, feature_names, effect_names, obj_names):
         else:
             print("rules:", rules)
             obj1_list, obj2_list, comparison = rule_to_code(rules, obj_names)
+            # precondition means that the system is not stacked, not inserted, picking location is above object and stack location is below object
             precond = ":precondition (and (not (stacked)) (not (inserted)) (pickloc ?above) (stackloc ?below) "
+            # Believe it or not this never happens in the save/stable
             if len(obj1_list) > 1:
                 precond += "(or"
                 for obj1 in obj1_list:
@@ -76,7 +83,7 @@ def tree_to_code(tree, feature_names, effect_names, obj_names):
                 precond += ") "
             else:
                 precond += "(%s ?below) " % obj1_list[0]
-
+            # Believe it or not this never happens in the save/stable
             if len(obj2_list) > 1:
                 precond += "(or"
                 for obj2 in obj2_list:
@@ -84,17 +91,21 @@ def tree_to_code(tree, feature_names, effect_names, obj_names):
                 precond += ")"
             else:
                 precond += "(%s ?above)" % obj2_list[0]
-
+            # seems like this is never none
             if comparison is not None:
                 precond += " %s" % comparison
             precond += ")"
-
+            # There are four type of objects, two comparisons and two objects. 4x4x2 = 32 preconditions there exist
             print(precond)
             eff = tree_.value[node][0]
             effect = ":effect (and (probabilistic"
             # this shenanigan is needed because probabilities add up to more than one.
+            # Probabilities calculated in  the following way:
+            # 1. Calculate the probabilities of each effect. Each node has the numbers of samples that fall into that node. The probability of an effect is the number of samples that fall into that node divided by the total number of samples.
+            # 2. If the sum of probabilities is greater than 1, subtract the residual from the effect with the highest probability
+
             probs = (eff / eff.sum())
-            probs = (probs * 1000).round().astype(np.int)
+            probs = (probs * 1000).round().astype(np.int32)
             ptotal = probs.sum()
             if ptotal > 1000:
                 residual = ptotal - 1000
@@ -106,47 +117,65 @@ def tree_to_code(tree, feature_names, effect_names, obj_names):
                 else:
                     effect += "\n\t\t\t\t 1.000 "
 
+                # If the effect is stacked, then set system stacked, inserted, above object is in stack, stack location is above object and below object is not stack location
                 if effect_names[i] == "stacked":
                     effect += "(and (stacked) (inserted) (instack ?above) (stackloc ?above) (not (stackloc ?below)))"
+                # If the effect is inserted, then set system inserted, above object is in stack, stack location is above object and below object is not stack location
                 elif effect_names[i] == "inserted":
                     effect += "(and (inserted) (instack ?above) (stackloc ?above) (not (stackloc ?below)))"
+                # otherwise, set the effect
+                # effects are roll1, roll2, tumble1, tumble2
                 else:
                     effect += "(%s)" % (effect_names[i])
             effect += ")"
+            # after probabilistic selection apply setting pick location not to be above
             effect += "\n\t\t\t\t(not (pickloc ?above)))"
             return np.array([[precond, effect]])
     return recurse(0, [])
 
 
 def rule_to_code(rule, obj_names):
+    # get the absolute values of the rule to check which elements are used
     absrules = np.abs(rule).tolist()
     indices = []
+    # Since there are five elements in the symbol (2 from obj0, 2 from obj1, 1 from interaction)
+    # We need five rules to check the types
     for x in range(1, 6):
+        # Put the index of the feature in the indices list
         if x in absrules:
             indices.append(absrules.index(x))
+        # This means that this feature was not used when splitting the tree
         else:
             indices.append(-1)
 
+    # list of all objects
     possible_obj_1 = list(obj_names.keys())
     possible_obj_2 = list(obj_names.keys())
+    # take first two elements of the rule and check zeros and ones match with object1 elementwise
+    # if it is not, remove the object from the list
     for i, idx in enumerate(indices[:2]):
         if idx == -1:
             continue
         sign = np.sign(rule[idx])
         possible_obj_1 = list(filter(lambda x: x[i] == sign, possible_obj_1))
 
+    # take the third and fourth elements of the rule and check if the signs are the same with object2 elementwise
+    # if it is not, remove the object from the list
     for i, idx in enumerate(indices[2:4]):
         if idx == -1:
             continue
         sign = np.sign(rule[idx])
         possible_obj_2 = list(filter(lambda x: x[i] == sign, possible_obj_2))
 
+    # get the object names from the list
     obj1_list = [obj_names[x] for x in possible_obj_1]
     obj2_list = [obj_names[x] for x in possible_obj_2]
 
+    # if the interaction element werent used in the decision, then it can be either relation0 or relation1
     if indices[4] == -1:
         comparison = "(or (relation0 ?below ?above) (relation1 ?below ?above))"
     else:
+        # if it was used in the decision, then check the sign and assign the relation accordingly
         sign = np.sign(rule[indices[4]])
         if sign == -1:
             comparison = "(relation0 ?below ?above)"

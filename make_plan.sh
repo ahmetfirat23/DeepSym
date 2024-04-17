@@ -3,7 +3,7 @@
 loc="$(grep save: $1 | sed 's/^.*: //')"
 
 # transform image to pddl problem
-python recognize.py -opts "$1" -goal "$2"
+python3 recognize.py -opts "$1" -goal "$2"
 # concatenate domain and problem file
 cat "$loc/domain.pddl" > "$loc/temp.pddl"
 cat "$loc/problem.pddl" >> "$loc/temp.pddl"
@@ -22,7 +22,7 @@ rm server.pid
 rm -r logs
 # parse the plan result
 # see the plan in {savepath}/plan.txt
-python parse_plan.py -opts "$1"
+python3 parse_plan.py -opts "$1"
 cat "$loc/plan.txt" >> "$loc/objects.txt"
 rm "$loc/planresult.txt"
 rm "$loc/plan.txt"
