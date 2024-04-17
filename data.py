@@ -48,6 +48,9 @@ class PairedObjectData(torch.utils.data.Dataset):
         self.eff_std = self.effect.std(dim=0)
         self.effect = (self.effect - self.eff_mu) / (self.eff_std + 1e-6)
 
+        self.visible_obj_count_start = torch.load("data/img/visible_obj_count_start.pt")
+        self.visible_obj_count_end = torch.load("data/img/visible_obj_count_end.pt")
+
     def __len__(self):
         return len(self.effect)
 

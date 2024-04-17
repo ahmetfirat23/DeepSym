@@ -1,3 +1,5 @@
+# TODO this one completely needs redo
+# Symbol category count is changed and rules need to be revised
 import os
 import argparse
 import yaml

@@ -17,8 +17,10 @@ device = torch.device(opts["device"])
 model = EffectRegressorMLP(opts)
 model.load(opts["save"], "_best", 1)
 model.load(opts["save"], "_best", 2)
+model.load(opts["save"], "_best", 3)
 model.encoder1.eval()
 model.encoder2.eval()
+model.encoder3.eval()
 
 transform = data.default_transform(size=opts["size"], affine=False, mean=0.279, std=0.0094)
 X = torch.load("data/img/obs_prev_z.pt")
@@ -34,7 +36,10 @@ for i in range(B):
 
 with torch.no_grad():
     category1 = model.encoder1(Y.to(device))
+    category2 = model.encoder2(Y.to(device))
 category1 = category1.int()
+category2 = category2.int()
+category_aug = torch.cat([category1, category2], dim=-1)
 
 # I think this takes all combinations of the images and concatenates them
 left_img = Y.repeat_interleave(B, 0)
@@ -43,8 +48,9 @@ concat = torch.cat([left_img, right_img], dim=1)
 
 # this generates the category for the concatenated images
 # left ones symbols + right ones symbols + interaction symbols
-category2 = model.encoder2(concat.to(device)).int()
-left_cat = category1.repeat_interleave(B, 0)
-right_cat = category1.repeat(B, 1)
-category_all = torch.cat([left_cat, right_cat, category2], dim=-1)
+category3 = model.encoder3(concat.to(device)).int()
+left_cat = category_aug.repeat_interleave(B, 0)
+right_cat = category_aug.repeat(B, 1)
+# TODO Categories should include visible object count at the start
+category_all = torch.cat([left_cat, right_cat, category3], dim=-1)
 torch.save(category_all.cpu(), os.path.join(opts["save"], "category.pt"))

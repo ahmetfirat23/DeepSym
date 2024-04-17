@@ -36,6 +36,7 @@ while not ok:
     ok = True
     # apply kmeans on trainset's effects
     # note that clustering is only done on the effects!
+    eff_aug = torch.cat([trainset.effect, trainset.visible_obj_count_end.unsqueeze(1)], dim=1) # TODO check data shapes to ensure this is working
     centroids, assigns, mse, _ = utils.kmeans(trainset.effect, k=K)
     print(mse)
     centroids = centroids * (trainset.eff_std + 1e-6) + trainset.eff_mu
