@@ -15,18 +15,21 @@ opts = yaml.safe_load(open(args.opts, "r"))
 opts["device"] = "cpu"
 device = opts["device"]
 
-# load model with level 2
-# loads encoder2_best.ckpt
+# load model with level 3
+# loads encoder3_best.ckpt
 # so RENAME THIS TO CHANGE THE MODEL WEIGHTS!!!
 model = EffectRegressorMLP(opts)
-model.load(opts["save"], "_best", 2)
-model.encoder2.eval() # set in test mode so objects always from center
+model.load(opts["save"], "_best", 3)
+model.encoder3.eval() # set in test mode so objects always from center
 
 # load data
 # transform the data two paired objects
 transform = data.default_transform(size=opts["size"], affine=False, mean=0.279, std=0.0094)
 trainset = data.PairedObjectData(transform=transform)
 
+# NUMBER OF EFFECT TYPES
+# THIS MUST BE CHANGED SINCE THERE WILL BE EXTRA EFFECT TYPES
+# WHAT ARE THEY?
 K = 6
 ok = False
 while not ok:

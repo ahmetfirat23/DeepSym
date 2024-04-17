@@ -173,8 +173,10 @@ def build_encoder(opts, level):
     if level == 1:
         code_dim = opts["code1_dim"]
     # pair object encoder
-    else:
+    elif level == 2:
         code_dim = opts["code2_dim"]
+    else:
+        code_dim = opts["code3_dim"]
     # if cnn is true, then we use a convolutional encoder for image data
     if opts["cnn"]:
         # get the number of layers according to single or pair object
