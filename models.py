@@ -17,7 +17,7 @@ class EffectRegressorMLP:
         # there is only flip action so only add previous object symbol
         self.decoder2 = MLP([opts["code2_dim"] + opts["code1_dim"]] + [opts["hidden_dim"]] * opts["depth"] + [3]).to(self.device)
         # there are flip and stack actions and previous symbols so need to add code3_dim
-        self.decoder3 = MLP([opts["code3_dim"] + (opts["code2_dim"] + opts["code1_dim"])*2 + 2] + [opts["hidden_dim"]] * opts["depth"] + [6]).to(self.device)
+        self.decoder3 = MLP([opts["code3_dim"] + (opts["code2_dim"] + opts["code1_dim"])*2 + 2] + [opts["hidden_dim"]] * opts["depth"] + [6 + 1]).to(self.device)
         self.optimizer1 = torch.optim.Adam(lr=opts["learning_rate1"],
                                            params=[
                                                {"params": self.encoder1.parameters()},
@@ -66,6 +66,8 @@ class EffectRegressorMLP:
         obs = sample["observation"].to(self.device)
         effect = sample["effect"].to(self.device)
         action = sample["action"].to(self.device)
+        visible_obj_count_start = sample["visible_obj_count_start"].to(self.device)
+        visible_obj_count_end = sample["visible_obj_count_end"].to(self.device)
 
         with torch.no_grad():
             h1 = self.encoder1(obs.reshape(-1, 1, obs.shape[2], obs.shape[3]))
@@ -73,9 +75,10 @@ class EffectRegressorMLP:
         h1 = h1.reshape(obs.shape[0], -1)
         h2 = h2.reshape(obs.shape[0], -1)
         h3 = self.encoder3(obs)
-        h_aug = torch.cat([h1, h2, h3, action], dim=-1)
+        h_aug = torch.cat([h1, h2, h3, action, visible_obj_count_start], dim=-1)
+        effect_aug = torch.cat([effect, visible_obj_count_end], dim=-1)
         effect_pred = self.decoder3(h_aug)
-        loss = self.criterion(effect_pred, effect)
+        loss = self.criterion(effect_pred, effect_aug)
         return loss
 
     def one_pass_optimize(self, loader, level):

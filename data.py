@@ -7,8 +7,8 @@ import numpy as np
 class SingleObjectData(torch.utils.data.Dataset):
     def __init__(self, transform=None):
         self.transform = transform
-        self.observation = torch.load("data/img/obs_prev_z.pt").unsqueeze(1)
-        self.action = torch.load("data/img/action.pt")
+        self.observation = torch.load("data/img/obs_1.pt").unsqueeze(1)
+        self.action = torch.load("data/img/action_1.pt")
 
         self.effect = torch.load("data/img/delta_pix_1.pt")
         # normalizes the effects for numerical stability
@@ -30,6 +30,21 @@ class SingleObjectData(torch.utils.data.Dataset):
             sample["observation"] = self.transform(self.observation[idx])
         return sample
 
+# Load data for second level. This is the same as SingleObjectData but with different data files.
+# This data is used to learn the effect of flip action.
+class SingleFlipObjectData(torch.utils.data.Dataset):
+    def __init__(self, transform=None):
+        self.transform = transform
+        self.observation = torch.load("data/img/obs_2.pt").unsqueeze(1)
+
+        self.effect = torch.load("data/img/delta_pix_2.pt")
+        self.eff_mu = self.effect.mean(dim=0)
+        self.eff_std = self.effect.std(dim=0)
+        self.effect = (self.effect - self.eff_mu) / (self.eff_std + 1e-6)
+
+    def __len__(self):
+        return len(self.observation)
+
 
 # loads the data from data/img folder
 # transform optional for image processing
@@ -38,10 +53,11 @@ class PairedObjectData(torch.utils.data.Dataset):
         self.transform = transform
         # init in train mode
         self.train = True
-        self.observation = torch.load("data/img/obs_prev_z.pt")
-        self.observation = self.observation.reshape(5, 10, 3, 4, 4, 42, 42)
-        self.observation = self.observation[:, :, 0]
+        self.observation = torch.load("data/img/obs_3.pt")
+        # TODO update the datasizes to match the new data
+        self.observation = self.observation.reshape(-1, 2, 42, 42)
 
+        self.action = torch.load("data/img/action_3.pt")
         self.effect = torch.load("data/img/delta_pix_3.pt")
         self.effect = self.effect.abs()
         self.eff_mu = self.effect.mean(dim=0)
@@ -56,28 +72,10 @@ class PairedObjectData(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         sample = {}
-        # idx is a number from 0 to 2500
-        # obj_i is the first object index
-        obj_i = idx // 500
-        # size_i is the first object size
-        size_i = (idx // 50) % 10
-        # obj_j is the second object index
-        obj_j = (idx // 10) % 5
-        # size_j is the second object size
-        size_j = idx % 10
-        if self.train:
-            # to sample the objects randomly
-            ix = np.random.randint(0, 4)
-            iy = np.random.randint(0, 4)
-            jx = np.random.randint(0, 4)
-            jy = np.random.randint(0, 4)
-        else:
-            # in test mode, the objects are always in the center
-            ix, iy, jx, jy = 2, 2, 2, 2
-
-        # get the images of the objects in pairs
-        img_i = self.observation[obj_i, size_i, ix, iy]
-        img_j = self.observation[obj_j, size_j, jx, jy]
+        # randomize the order of the images
+        i, j = np.random.choice([0,1], 2, replace=False)
+        img_i = self.observation[idx, i]
+        img_j = self.observation[idx, j]
         # apply the transform if provided and stack the images
         if self.transform:
             img_i = self.transform(img_i)
@@ -88,6 +86,9 @@ class PairedObjectData(torch.utils.data.Dataset):
             sample["observation"] = torch.stack([img_i, img_j])
         # get the effect of the pair
         sample["effect"] = self.effect[idx]
+        sample["action"] = self.action[idx]
+        sample["visible_obj_count_start"] = self.visible_obj_count_start[idx]
+        sample["visible_obj_count_end"] = self.visible_obj_count_end[idx]
         return sample
 
 
