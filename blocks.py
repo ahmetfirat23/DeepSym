@@ -102,15 +102,15 @@ class MLP(torch.nn.Module):
         torch.save(self.cpu().state_dict(), os.path.join(path, name+".ckpt"))
         self.train().to(dv)
 
-# convolutional block
-# batch normalization optional
-# std is the standard deviation for the weight initialization
-# bias is optional
-# in channels are the input channels to the convolutional layer
-# out channels are the output channels of the convolutional layer
-# kernel size is the size of the kernel
-# stride is the stride of the convolution
-# padding is the padding of the convolution
+"""convolutional block
+batch normalization optional
+std is the standard deviation for the weight initialization
+bias is optional
+in channels are the input channels to the convolutional layer
+out channels are the output channels of the convolutional layer
+kernel size is the size of the kernel
+stride is the stride of the convolution
+padding is the padding of the convolution"""
 class ConvBlock(torch.nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, std=None, bias=True,
                  batch_norm=False):
@@ -129,11 +129,46 @@ class ConvBlock(torch.nn.Module):
     def forward(self, x):
         return self.block(x)
 
-# flatten layer
-# dims is a list of dimensions to flatten
-# for example, if dims=[1, 2, 3], then the tensor is flattened along the 1, 2, and 3 dimensions
-# if dims=[1, 2], then the tensor is flattened along the 1 and 2 dimensions
-# if dims=[1], then the tensor is flattened along the 1 dimension
+"""Single RNNCell
+input size is the size of the symbol and action
+hidden size is the size of the hidden state
+output size is the size of the 4 (dx, dy, dd, and dF)"""   
+class RNNCell(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, output_size, nonlinearity="relu"):
+        super(RNNCell, self).__init__()
+        self.rnn = torch.nn.RNNCell(input_size=input_size, hidden_size=hidden_size, nonlinearity=nonlinearity)
+        self.linear = torch.nn.Linear(in_features=hidden_size, out_features=output_size)
+
+
+    def forward(self, x, h):
+        if h is None:
+            h = torch.zeros(x.shape[0], self.rnn.hidden_size, device=x.device)
+        h = self.rnn(x, h)
+        return self.linear(h), h
+
+"""RNN
+input size is the size of the symbol and action
+hidden size is the size of the hidden state
+output size is the size of the 4 (dx, dy, dd, and dF)"""  
+class RNN(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, output_size, nonlinearity="relu"):
+        super(RNN, self).__init__()
+        self.cell = RNNCell(input_size, hidden_size, output_size, nonlinearity)
+
+    def forward(self, x):
+        h = None
+        outputs = []
+        for i in range(x.shape[1]):
+            y, h = self.cell(x[:, i], h)
+            outputs.append(y)
+        return torch.stack(outputs, dim=1)
+
+
+""" flatten layer
+ dims is a list of dimensions to flatten
+ for example, if dims=[1, 2, 3], then the tensor is flattened along the 1, 2, and 3 dimensions
+ if dims=[1, 2], then the tensor is flattened along the 1 and 2 dimensions
+ if dims=[1], then the tensor is flattened along the 1 dimension """
 class Flatten(torch.nn.Module):
     def __init__(self, dims):
         super(Flatten, self).__init__()
@@ -148,13 +183,13 @@ class Flatten(torch.nn.Module):
     def extra_repr(self):
         return "dims=[" + ", ".join(list(map(str, self.dims))) + "]"
 
-# average layer
-# in deepsym used as nn.AdaptiveAvgPool2d((1, 1))
-# wrapper for torch.mean
-# dims is a list of dimensions to average
-# for example, if dims=[1, 2, 3], then the tensor is averaged along the 1, 2, and 3 dimensions
-# if dims=[1, 2], then the tensor is averaged along the 1 and 2 dimensions
-# if dims=[1], then the tensor is averaged along the 1 dimension
+""" average layer
+in deepsym used as nn.AdaptiveAvgPool2d((1, 1))
+wrapper for torch.mean
+dims is a list of dimensions to average
+for example, if dims=[1, 2, 3], then the tensor is averaged along the 1, 2, and 3 dimensions
+if dims=[1, 2], then the tensor is averaged along the 1 and 2 dimensions
+if dims=[1], then the tensor is averaged along the 1 dimension """
 class Avg(torch.nn.Module):
     def __init__(self, dims):
         super(Avg, self).__init__()
