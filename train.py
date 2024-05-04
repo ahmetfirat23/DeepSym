@@ -54,4 +54,14 @@ loader = torch.utils.data.DataLoader(trainset, batch_size=opts["batch_size3"], s
 model.print_model(3)
 model.train(opts["epoch3"], loader, 3)
 
+# load rnn level data
+transform = data.default_transform(size=opts["size"], affine=True, mean=0.279, std=0.0094)
+trainset = data.SequentialObjectData(transform=transform)
+loader = torch.utils.data.DataLoader(trainset, batch_size=opts["batch_size4"], shuffle=True)
+model_rnn = EffectRegressorRNN(opts)
+model_rnn.load(opts["save"], "_best", 1)
+model_rnn.load(opts["save"], "_best", 2)
+model_rnn.print_model(3)
+model_rnn.train(opts["epoch4"], loader, 3)
+
 

@@ -173,7 +173,7 @@ class EffectRegressorRNN:
         self.decoder3 = RNN(input_size=(opts["code3_dim"] + opts["code2_dim"] + opts["code1_dim"] + 3) ,
                             hidden_size=opts["hidden_dim"],
                             output_size=3).to(self.device)
-        self.optimizer = torch.optim.Adam(lr=opts["learning_rate3"],
+        self.optimizer = torch.optim.Adam(lr=opts["learning_rate4"],
                                            params=[
                                                {"params": self.encoder3.parameters()},
                                                {"params": self.decoder3.parameters()}],
