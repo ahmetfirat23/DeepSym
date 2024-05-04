@@ -51,8 +51,6 @@ class SingleFlipObjectData(torch.utils.data.Dataset):
 class PairedObjectData(torch.utils.data.Dataset):
     def __init__(self, transform=None):
         self.transform = transform
-        # init in train mode
-        self.train = True
         self.observation = torch.load("data/img/obs_3.pt")
         # TODO update the datasizes to match the new data
         self.observation = self.observation.reshape(-1, 2, 42, 42)
@@ -89,6 +87,47 @@ class PairedObjectData(torch.utils.data.Dataset):
         sample["action"] = self.action[idx]
         sample["visible_obj_count_start"] = self.visible_obj_count_start[idx]
         sample["visible_obj_count_end"] = self.visible_obj_count_end[idx]
+        return sample
+
+
+class SequentialObjectData(torch.utils.data.Dataset):
+    def __init__(self, transform=None):
+        self.transform = transform
+        self.observation = torch.load("data/img/obs_4.pt")
+        self.observation = self.observation.reshape(2500, -1, 42, 42) # Assume 2500 sequences of 42x42 images
+
+        self.action = torch.load("data/img/action_4.pt")
+        self.effect = torch.load("data/img/delta_pix_4.pt")
+        self.eff_mu = self.effect.mean(dim=0)
+        self.eff_std = self.effect.std(dim=0)
+        self.effect = (self.effect - self.eff_mu) / (self.eff_std + 1e-6)
+
+    def __len__(self):
+        return len(self.effect)
+    
+    def __getitem__(self, idx):
+        sample = {}
+        observations = self.observation[idx]
+        actions = self.action[idx]
+        effects = self.effect[idx]
+
+        if self.transform:
+            for i in range(len(observations)):
+                observations[i] = self.transform(observations[i])
+        
+        # If second object is going to be showed to the model, change the order of the objects to prevent the model from learning the order
+        for i in range(len(observations)):
+            no_action = actions[-1]
+            if no_action == 1:
+                p = np.random.randint(0, 2)
+                if p == 1:
+                    actions[i-1], actions[i] = actions[i], actions[i-1]
+                    observations[i-1], observations[i] = observations[i], observations[i-1]
+                    effects[i-1], effects[i] = effects[i], effects[i-1]
+
+        sample["observation"] = observations
+        sample["effect"] = effects
+        sample["action"] = actions
         return sample
 
 

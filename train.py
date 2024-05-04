@@ -3,7 +3,7 @@ import argparse
 import time
 import yaml
 import torch
-from models import EffectRegressorMLP
+from models import EffectRegressorMLP, EffectRegressorRNN
 import data
 
 parser = argparse.ArgumentParser("Train effect prediction models.")
@@ -53,3 +53,5 @@ trainset = data.PairedObjectData(transform=transform)
 loader = torch.utils.data.DataLoader(trainset, batch_size=opts["batch_size3"], shuffle=True)
 model.print_model(3)
 model.train(opts["epoch3"], loader, 3)
+
+

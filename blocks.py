@@ -1,9 +1,10 @@
 import math
 import os
 import torch
+from torch.nn.parameter import Parameter
 
-# gumbel sigmoid function for binary representation
-# hard version
+"""gumbel sigmoid function for binary representation
+hard version"""
 class StraightThrough(torch.autograd.Function):
 
     @staticmethod
@@ -14,7 +15,7 @@ class StraightThrough(torch.autograd.Function):
     def backward(ctx, grad):
         return grad.clamp(-1., 1.)
 
-# gumbel sigmoid layer
+"""gumbel sigmoid layer"""
 class STLayer(torch.nn.Module):
 
     def __init__(self):
@@ -24,8 +25,8 @@ class STLayer(torch.nn.Module):
     def forward(self, x):
         return self.func(x)
 
-# linear layer
-# batch normalization optional
+"""linear layer
+batch normalization optional"""
 class Linear(torch.nn.Module):
     """ linear layer with optional batch normalization. """
     def __init__(self, in_features, out_features, std=None, batch_norm=False, gain=None):
@@ -61,18 +62,18 @@ class Linear(torch.nn.Module):
     def extra_repr(self):
         return "in_features={}, out_features={}".format(self.in_features, self.out_features)
 
-# multi-layer perceptron
-# batch normalization optional
-# input and hidden layer dropout optional
-# activation function is ReLU
-# layer_info is a list of integers, where the first element is the input dimension and
-# preceeding elements are hidden layer dimensions and the last element is the output dimension
-# std is the standard deviation for the weight initialization
+"""multi-layer perceptron
+batch normalization optional
+input and hidden layer dropout optional
+activation function is ReLU
+layer_info is a list of integers, where the first element is the input dimension and
+preceeding elements are hidden layer dimensions and the last element is the output dimension
+std is the standard deviation for the weight initialization
     
-# in drop is the dropout rate for the input layer
-# hid drop is the dropout rate for the hidden layers
+in drop is the dropout rate for the input layer
+hid drop is the dropout rate for the hidden layers"""
 class MLP(torch.nn.Module):
-    """ multi-layer perceptron with batch norm option """
+    # multi-layer perceptron with batch norm option
     def __init__(self, layer_info, activation=torch.nn.ReLU(), std=None, batch_norm=False, indrop=None, hiddrop=None):
         super(MLP, self).__init__()
         layers = []
@@ -134,17 +135,59 @@ input size is the size of the symbol and action
 hidden size is the size of the hidden state
 output size is the size of the 4 (dx, dy, dd, and dF)"""   
 class RNNCell(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, nonlinearity="relu"):
-        super(RNNCell, self).__init__()
-        self.rnn = torch.nn.RNNCell(input_size=input_size, hidden_size=hidden_size, nonlinearity=nonlinearity)
-        self.linear = torch.nn.Linear(in_features=hidden_size, out_features=output_size)
+    def __init__(self, input_size, hidden_size, output_size, bias=True, nonlinearity="relu", device="cpu", dtype=torch.float32, num_chunks=1):
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.bias = bias
+        self.nonlinearity = nonlinearity
+        self.weight_x = Parameter(torch.empty((num_chunks * hidden_size, input_size), **factory_kwargs))
+        self.weight_h = Parameter(torch.empty((num_chunks * hidden_size, hidden_size), **factory_kwargs))
+        self.weight_y = Parameter(torch.empty((num_chunks * output_size, hidden_size), **factory_kwargs))
+        if bias:
+            self.bias_x = Parameter(torch.empty(num_chunks * hidden_size, **factory_kwargs))
+            self.bias_h = Parameter(torch.empty(num_chunks * hidden_size, **factory_kwargs))
+            self.bias_y = Parameter(torch.empty(num_chunks * output_size, **factory_kwargs))
+        else:
+            self.register_parameter('bias_x', None)
+            self.register_parameter('bias_h', None)
+            self.register_parameter('bias_y', None)
 
 
     def forward(self, x, h):
+        if x.dim() not in (1, 2):
+            raise ValueError(f"RNNCell: Expected input to be 1D or 2D, got {x.dim()}D instead")
+        if h is not None and h.dim() not in (1, 2):
+            raise ValueError(f"RNNCell: Expected hidden to be 1D or 2D, got {h.dim()}D instead")
+        is_batched = x.dim() == 2
+        if not is_batched:
+            x = x.unsqueeze(0)
+
         if h is None:
-            h = torch.zeros(x.shape[0], self.rnn.hidden_size, device=x.device)
-        h = self.rnn(x, h)
-        return self.linear(h), h
+            h = torch.zeros(x.size(0), self.hidden_size, dtype=x.dtype, device=x.device)
+        else:
+            h= h.unsqueeze(0) if not is_batched else h
+
+        if self.nonlinearity == "tanh":
+            h_bar = torch.nn.Tanh( self.weight_x @ x + self.bias_x + self.weight_h @ h + self.bias_h )
+            y = self.weight_y @ h_bar + self.bias_y
+        elif self.nonlinearity == "relu":
+            h_bar = torch.nn.ReLU( self.weight_x @ x + self.bias_x + self.weight_h @ h + self.bias_h )
+            y = self.weight_y @ h_bar + self.bias_y
+            # TODO Somehow branch to prevent data leakage.
+        else:
+            h_bar = input  
+            y = self.linear(h_bar)
+            raise RuntimeError(
+                f"Unknown nonlinearity: {self.nonlinearity}")
+
+        if not is_batched:
+            h_bar = h_bar.squeeze(0)
+            y = y.squeeze(0)
+
+        return y, h_bar
+    
 
 """RNN
 input size is the size of the symbol and action
@@ -162,6 +205,17 @@ class RNN(torch.nn.Module):
             y, h = self.cell(x[:, i], h)
             outputs.append(y)
         return torch.stack(outputs, dim=1)
+    
+    def load(self, path, name):
+        state_dict = torch.load(os.path.join(path, name+".ckpt"))
+        self.load_state_dict(state_dict)
+
+    def save(self, path, name):
+        dv = next(self.parameters()).device
+        if not os.path.exists(path):
+            os.makedirs(path)
+        torch.save(self.cpu().state_dict(), os.path.join(path, name+".ckpt"))
+        self.train().to(dv)
 
 
 """ flatten layer
